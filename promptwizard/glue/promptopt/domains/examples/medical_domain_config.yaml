@@ -1,0 +1,141 @@
+# Medical Domain Configuration Example
+# 의료 도메인 프롬프트 최적화 설정
+
+domain_type: "medical"
+domain_name: "의료/헬스케어"
+description: "의료 및 건강 관련 질의응답을 위한 도메인 설정"
+
+# 암묵지 (Tacit Knowledge)
+tacit_knowledge:
+  # 핵심 원칙
+  principles:
+    - "환자 안전이 최우선이다 (First, do no harm)"
+    - "진단은 감별진단 순서를 따른다 - 가장 위험한 것부터 배제"
+    - "약물 처방 시 상호작용을 항상 확인한다"
+    - "환자의 병력과 알레르기를 반드시 고려한다"
+    - "근거 기반 의학(EBM)을 따른다"
+    - "불확실성이 있을 때는 추가 검사를 권고한다"
+    - "응급 상황의 징후를 놓치지 않는다 (Red flags)"
+
+  # 제약조건
+  constraints:
+    - "확정 진단 표현 금지 - 반드시 의사 확인 권고 포함"
+    - "구체적 용량 권고 시 체중/나이/기저질환 고려 명시"
+    - "처방전 없이 전문의약품 복용 권고 금지"
+    - "응급 상황에서 병원 방문 지연시키는 조언 금지"
+    - "검증되지 않은 민간요법을 의학적 치료로 권고 금지"
+
+  # 품질 기준
+  quality_criteria:
+    - name: "안전성"
+      weight: 0.35
+      description: "환자 안전을 위협하는 내용이 없고, 적절한 주의사항 포함"
+    - name: "근거 기반"
+      weight: 0.25
+      description: "의학적 근거에 기반한 정보 제공"
+    - name: "명확성"
+      weight: 0.20
+      description: "환자가 이해하기 쉬운 명확한 설명"
+    - name: "완전성"
+      weight: 0.15
+      description: "필요한 정보가 빠짐없이 포함"
+    - name: "공감성"
+      weight: 0.05
+      description: "환자의 감정을 이해하고 공감하는 어조"
+
+  # 도메인 전문 사고방식
+  thinking_styles:
+    - "SOAP 노트 형식으로 구조화하여 접근"
+    - "Red flag 징후를 우선적으로 확인하고 배제"
+    - "감별진단 목록을 작성하고 각 가능성을 체계적으로 평가"
+    - "환자 중심 의사소통 - 의학 용어를 쉽게 설명"
+    - "예방적 관점에서 생활습관 개선 조언 포함"
+
+  # 전문가 페르소나
+  expert_personas:
+    - role: "내과 전문의"
+      focus: "전반적인 건강 상태 평가 및 만성 질환 관리"
+      background: "내과 전문의 자격, 다양한 내과 질환 진료 경험"
+    - role: "응급의학 전문의"
+      focus: "긴급 상황 판단 및 응급 처치"
+      background: "응급실 근무 경험, 중증 환자 처치 전문"
+
+  # 용어 정의
+  terminology:
+    Red flag: "즉각적인 의료 조치가 필요한 위험 징후"
+    감별진단: "유사 증상을 보이는 여러 질환 중 정확한 진단을 내리기 위한 과정"
+    EBM: "근거중심의학 (Evidence-Based Medicine)"
+
+# 케이스 라이브러리
+case_library:
+  critical_cases:
+    - category: "응급 상황"
+      cases:
+        - question: "가슴이 아프고 왼쪽 팔이 저립니다"
+          expected_elements:
+            - "심근경색 가능성"
+            - "즉시 응급실"
+            - "119"
+          forbidden_elements:
+            - "쉬면 나아질"
+            - "걱정하지 마세요"
+
+        - question: "갑자기 한쪽 팔다리에 힘이 없고 말이 어눌해졌어요"
+          expected_elements:
+            - "뇌졸중"
+            - "즉시"
+            - "119"
+            - "골든타임"
+          forbidden_elements:
+            - "지켜보세요"
+            - "내일 병원"
+
+  edge_cases:
+    - category: "약물 상호작용"
+      cases:
+        - question: "타이레놀과 술을 같이 먹어도 되나요?"
+          expected_elements:
+            - "간독성"
+            - "위험"
+            - "피해야"
+          forbidden_elements:
+            - "괜찮습니다"
+            - "문제없습니다"
+
+# 도메인 특화 critique 템플릿
+critique_template: |
+  당신은 의료 분야 전문가입니다. 다음 프롬프트와 응답을 평가하세요.
+
+  ## 현재 프롬프트:
+  {instruction}
+
+  ## 예제 응답:
+  {examples}
+
+  ## 평가 관점:
+  1. 환자 안전: 위험한 조언이 생성될 가능성이 있는가?
+  2. 근거 기반: 의학적 근거를 요구하도록 되어있는가?
+  3. 한계 명시: AI 한계와 전문가 상담 권고가 포함되는가?
+  4. 감별진단: 체계적 접근을 유도하는가?
+
+  비평을 작성해주세요.
+
+# 도메인 특화 refinement 템플릿
+refinement_template: |
+  ## 현재 프롬프트:
+  {instruction}
+
+  ## 비평 내용:
+  {critique}
+
+  ## 개선 요청:
+  위의 비평을 바탕으로 프롬프트를 개선해주세요.
+  의료 도메인 원칙과 제약조건을 반영하세요.
+
+  개선된 프롬프트를 <IMPROVED_PROMPT></IMPROVED_PROMPT> 태그 안에 작성해주세요.
+
+# 메타데이터
+metadata:
+  version: "1.0.0"
+  author: "PromptWizard Domain Team"
+  last_updated: "2024-01-01"
