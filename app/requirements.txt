@@ -1,0 +1,18 @@
+# Domain-Aware Prompt Optimizer App Requirements
+
+# Web framework
+streamlit>=1.28.0
+
+# Data handling
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# Utilities
+typing-extensions>=4.0.0
+
+# Optional: For LLM integration
+openai>=1.0.0
+tiktoken>=0.5.0
+
+# Optional: For Azure integration
+azure-identity>=1.15.0
