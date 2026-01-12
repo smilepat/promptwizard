@@ -6,7 +6,8 @@
       "Bash(python -m streamlit run:*)",
       "Bash(timeout:*)",
       "Bash(where:*)",
-      "Bash(py -m streamlit:*)"
+      "Bash(py -m streamlit:*)",
+      "Bash(git add:*)"
     ]
   }
 }
