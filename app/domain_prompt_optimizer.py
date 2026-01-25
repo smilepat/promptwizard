@@ -15,6 +15,12 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# Ensure we can import promptwizard module
+import os
+abs_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if abs_project_root not in sys.path:
+    sys.path.insert(0, abs_project_root)
+
 from promptwizard.glue.promptopt.domains import (
     DomainConfig,
     DomainKnowledge,
@@ -28,6 +34,14 @@ from promptwizard.glue.promptopt.domains import (
     MEDICAL_DOMAIN_CONFIG,
     LEGAL_DOMAIN_CONFIG,
     FINANCE_DOMAIN_CONFIG,
+    ENGLISH_QUESTION_DOMAIN_CONFIG,
+)
+
+# Import English question specific utilities
+from promptwizard.glue.promptopt.domains.english_question.config import (
+    QUESTION_TEMPLATES,
+    DIFFICULTY_LEVELS,
+    ACHIEVEMENT_STANDARDS,
 )
 
 # Page configuration
@@ -37,6 +51,85 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Initialize session state for prompt library
+if 'prompt_library' not in st.session_state:
+    st.session_state.prompt_library = []
+
+# Prompt library file path
+import json
+PROMPT_LIBRARY_FILE = Path(__file__).parent / "prompt_library.json"
+
+def load_prompt_library():
+    """Load prompt library from file."""
+    if PROMPT_LIBRARY_FILE.exists():
+        with open(PROMPT_LIBRARY_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return []
+
+def save_prompt_library(library):
+    """Save prompt library to file."""
+    with open(PROMPT_LIBRARY_FILE, 'w', encoding='utf-8') as f:
+        json.dump(library, f, ensure_ascii=False, indent=2)
+
+def add_to_library(name, domain, original, enhanced, differences):
+    """Add a prompt to the library."""
+    library = load_prompt_library()
+    from datetime import datetime
+    entry = {
+        "id": len(library) + 1,
+        "name": name,
+        "domain": domain,
+        "original_prompt": original,
+        "enhanced_prompt": enhanced,
+        "differences": differences,
+        "created_at": datetime.now().isoformat()
+    }
+    library.append(entry)
+    save_prompt_library(library)
+    return entry
+
+def analyze_prompt_differences(original: str, enhanced: str, domain_config: DomainConfig) -> dict:
+    """Analyze differences between original and enhanced prompts."""
+    differences = {
+        "added_principles": [],
+        "added_constraints": [],
+        "added_expert_context": False,
+        "added_quality_criteria": False,
+        "length_increase": len(enhanced) - len(original),
+        "summary": []
+    }
+
+    # Check for added principles
+    for principle in domain_config.knowledge.principles:
+        if principle.lower()[:20] in enhanced.lower() or any(word in enhanced for word in principle.split()[:3]):
+            differences["added_principles"].append(principle[:50] + "...")
+
+    # Check for added constraints
+    for constraint in domain_config.knowledge.constraints:
+        if any(word in enhanced for word in constraint.split()[:3]):
+            differences["added_constraints"].append(constraint[:50] + "...")
+
+    # Check for expert context
+    if any(persona.role in enhanced for persona in domain_config.knowledge.expert_personas):
+        differences["added_expert_context"] = True
+
+    # Check for quality criteria
+    if any(qc.name in enhanced for qc in domain_config.knowledge.quality_criteria):
+        differences["added_quality_criteria"] = True
+
+    # Generate summary
+    if differences["added_principles"]:
+        differences["summary"].append(f"✅ {len(differences['added_principles'])}개의 도메인 원칙 반영")
+    if differences["added_constraints"]:
+        differences["summary"].append(f"🚫 {len(differences['added_constraints'])}개의 제약조건 추가")
+    if differences["added_expert_context"]:
+        differences["summary"].append("👤 전문가 관점 추가")
+    if differences["added_quality_criteria"]:
+        differences["summary"].append("📊 품질 기준 반영")
+    differences["summary"].append(f"📝 텍스트 길이: +{differences['length_increase']} 문자")
+
+    return differences
 
 # Custom CSS
 st.markdown("""
@@ -93,7 +186,8 @@ def get_domain_config(domain_type: str) -> DomainConfig:
     configs = {
         "medical": MEDICAL_DOMAIN_CONFIG,
         "legal": LEGAL_DOMAIN_CONFIG,
-        "finance": FINANCE_DOMAIN_CONFIG
+        "finance": FINANCE_DOMAIN_CONFIG,
+        "english_question": ENGLISH_QUESTION_DOMAIN_CONFIG
     }
     return configs.get(domain_type)
 
@@ -111,7 +205,8 @@ def render_domain_selector():
     domain_options = {
         "medical": "🏥 의료/헬스케어",
         "legal": "⚖️ 법률",
-        "finance": "💰 금융/투자"
+        "finance": "💰 금융/투자",
+        "english_question": "📝 영어문항생성"
     }
 
     selected_domain = st.sidebar.selectbox(
@@ -187,6 +282,213 @@ def render_prompt_input():
     )
 
     return task_description, base_instruction, answer_format
+
+
+def render_english_question_input():
+    """Render English question generation specific input section."""
+    st.header("📝 영어 문항 생성 설정")
+
+    # Question type selection
+    st.subheader("1️⃣ 문항 유형 선택")
+
+    template_options = {
+        "grammar_tense": "📗 문법 - 시제",
+        "grammar_structure": "📗 문법 - 문장구조 (관계사/분사/가정법)",
+        "vocabulary_context": "📘 어휘 - 문맥상 의미",
+        "reading_main_idea": "📙 독해 - 주제/요지/제목",
+        "reading_blank": "📙 독해 - 빈칸 추론",
+        "reading_order": "📙 독해 - 순서 배열",
+        "reading_insertion": "📙 독해 - 문장 삽입",
+        "conversation": "💬 대화문 - 응답 완성",
+        "listening_comprehension": "🎧 듣기 - 내용 이해",
+    }
+
+    selected_template_id = st.selectbox(
+        "문항 유형",
+        options=list(template_options.keys()),
+        format_func=lambda x: template_options[x]
+    )
+
+    selected_template = QUESTION_TEMPLATES.get(selected_template_id)
+
+    # Show template description
+    if selected_template:
+        st.info(f"**설명:** {selected_template.description}")
+
+        # Show tips in expander
+        with st.expander("💡 출제 팁 보기"):
+            for tip in selected_template.tips:
+                st.write(f"• {tip}")
+
+    st.divider()
+
+    # Difficulty selection
+    st.subheader("2️⃣ 난이도/학년 선택")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        difficulty_options = {
+            "elementary_low": "초급 하 (초등 3-4학년, A1)",
+            "elementary_high": "초급 상 (초등 5-6학년, A2)",
+            "intermediate_low": "중급 하 (중1-2, B1)",
+            "intermediate_mid": "중급 중 (중3, B1+)",
+            "intermediate_high": "중급 상 (고1, B2)",
+            "advanced_low": "고급 하 (고2, B2+)",
+            "advanced_high": "고급 상 (고3/수능, C1)",
+            "proficiency": "숙달 (대학/공인시험, C1+)",
+        }
+
+        selected_difficulty_id = st.selectbox(
+            "난이도",
+            options=list(difficulty_options.keys()),
+            format_func=lambda x: difficulty_options[x],
+            index=4  # Default to intermediate_high (고1)
+        )
+
+        selected_difficulty = DIFFICULTY_LEVELS.get(selected_difficulty_id)
+
+    with col2:
+        if selected_difficulty:
+            st.metric("CEFR 레벨", selected_difficulty.cefr)
+            st.write(f"**어휘 범위:** {selected_difficulty.vocabulary_range}")
+            st.write(f"**지문 길이:** {selected_difficulty.passage_length}")
+
+    # Show grammar scope for selected difficulty
+    if selected_difficulty:
+        with st.expander("📚 해당 수준 문법 범위"):
+            for grammar in selected_difficulty.grammar_scope:
+                st.write(f"• {grammar}")
+
+    st.divider()
+
+    # Additional options
+    st.subheader("3️⃣ 세부 설정")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        num_questions = st.number_input("생성할 문항 수", min_value=1, max_value=10, value=1)
+
+        if selected_template_id.startswith("grammar"):
+            target_grammar = st.text_input(
+                "목표 문법 요소",
+                placeholder="예: 현재완료, 관계대명사, 가정법 과거"
+            )
+        else:
+            target_grammar = ""
+
+    with col2:
+        if selected_template_id.startswith("reading") or selected_template_id == "listening_comprehension":
+            topic = st.text_input(
+                "지문 주제",
+                placeholder="예: 환경, 기술, 교육, 문화"
+            )
+        else:
+            topic = ""
+
+        include_explanation = st.checkbox("정답 해설 포함", value=True)
+        include_korean = st.checkbox("한글 번역 포함", value=False)
+
+    st.divider()
+
+    # Achievement standard selection (optional)
+    st.subheader("4️⃣ 교육과정 성취기준 연계 (선택)")
+
+    school_level = st.radio(
+        "학교급",
+        options=["none", "middle_school", "high_school"],
+        format_func=lambda x: {"none": "선택 안함", "middle_school": "중학교", "high_school": "고등학교"}[x],
+        horizontal=True
+    )
+
+    selected_standard = None
+    if school_level != "none":
+        standards = ACHIEVEMENT_STANDARDS.get(school_level, {})
+        skill_area = st.selectbox(
+            "영역",
+            options=list(standards.keys()),
+            format_func=lambda x: {"listening": "듣기", "speaking": "말하기", "reading": "읽기", "writing": "쓰기"}.get(x, x)
+        )
+
+        if skill_area in standards:
+            standard_options = {s["code"]: f"{s['code']} {s['content']}" for s in standards[skill_area]}
+            selected_standard_code = st.selectbox(
+                "성취기준",
+                options=list(standard_options.keys()),
+                format_func=lambda x: standard_options[x]
+            )
+            selected_standard = selected_standard_code
+
+    st.divider()
+
+    # Generate prompt button
+    st.subheader("5️⃣ 프롬프트 생성")
+
+    additional_instructions = st.text_area(
+        "추가 지시사항 (선택)",
+        placeholder="예: 실생활 맥락을 활용해주세요. / 학생들이 자주 틀리는 오류를 반영해주세요.",
+        height=80
+    )
+
+    # Build the prompt from template
+    generated_prompt = ""
+    if selected_template and st.button("🚀 템플릿 기반 프롬프트 생성", type="primary"):
+        # Fill template with selected options
+        generated_prompt = selected_template.prompt_template.format(
+            grade_level=selected_difficulty.grade_range if selected_difficulty else "미지정",
+            difficulty=selected_difficulty.level_name if selected_difficulty else "미지정",
+            cefr_level=selected_difficulty.cefr if selected_difficulty else "미지정",
+            target_tense=target_grammar if target_grammar else "전체 시제",
+            target_grammar=target_grammar if target_grammar else "미지정",
+            vocabulary_level=selected_difficulty.vocabulary_range if selected_difficulty else "미지정",
+            passage_length=selected_difficulty.passage_length if selected_difficulty else "150-200단어",
+            topic=topic if topic else "일반적 주제",
+            text_type="설명문",
+            blank_type="구/절",
+            inference_level="중간",
+            situation="일상 대화",
+            turns="3-4",
+            listening_type="대화",
+            duration="30-40",
+            output_format=selected_template.output_format,
+            additional_instructions=additional_instructions if additional_instructions else "없음"
+        )
+
+        # Add achievement standard if selected
+        if selected_standard:
+            generated_prompt += f"\n\n### 연계 성취기준:\n{selected_standard}"
+
+        # Add options
+        if include_explanation:
+            generated_prompt += "\n\n### 추가 요청:\n- 각 문항에 정답 해설을 포함해주세요."
+        if include_korean:
+            generated_prompt += "\n- 지문의 한글 번역을 포함해주세요."
+        if num_questions > 1:
+            generated_prompt += f"\n- 총 {num_questions}개의 문항을 생성해주세요."
+
+        st.session_state['english_generated_prompt'] = generated_prompt
+
+    # Show generated prompt
+    if 'english_generated_prompt' in st.session_state and st.session_state['english_generated_prompt']:
+        st.subheader("생성된 프롬프트")
+        st.code(st.session_state['english_generated_prompt'], language="markdown")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📋 프롬프트 복사"):
+                st.success("프롬프트가 복사되었습니다!")
+        with col2:
+            if st.button("🔄 프롬프트 초기화"):
+                st.session_state['english_generated_prompt'] = ""
+                st.rerun()
+
+    return (
+        st.session_state.get('english_generated_prompt', ''),
+        selected_template_id,
+        selected_difficulty_id,
+        selected_standard
+    )
 
 
 def render_test_case_section(config: DomainConfig):
@@ -283,19 +585,158 @@ def render_evaluation_results(scores: dict):
             )
         i += 1
 
+    # Render validation details
+    if 'validation_details' in scores:
+        st.subheader("🛡️ 결정론적 검증 (Deterministic Verification)")
+        
+        details = scores['validation_details']
+        if all(details.values()):
+            st.success("모든 검증 통과! (All Validators Passed)")
+        else:
+            st.error("검증 실패 항목이 있습니다! (Validation Failed)")
+            
+        for name, passed in details.items():
+            if passed:
+                st.write(f"✅ **{name}**: Pass")
+            else:
+                st.write(f"❌ **{name}**: Fail")
+                
+    st.divider()
 
-def render_enhanced_prompt(optimizer: DomainAwarePromptOptimizer, base_instruction: str):
-    """Render enhanced prompt."""
+
+def render_enhanced_prompt(optimizer: DomainAwarePromptOptimizer, base_instruction: str, domain_config: DomainConfig):
+    """Render enhanced prompt with difference analysis and library saving."""
     st.header("🚀 강화된 프롬프트")
 
     enhanced = optimizer.enhance_base_instruction(base_instruction)
 
-    st.code(enhanced, language="markdown")
+    # Analyze differences
+    differences = analyze_prompt_differences(base_instruction, enhanced, domain_config)
 
-    # Copy button
-    if st.button("📋 복사"):
-        st.write("프롬프트가 클립보드에 복사되었습니다!")
-        st.session_state['copied_prompt'] = enhanced
+    # Show comparison in two columns
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("📝 원본 프롬프트")
+        st.code(base_instruction, language="markdown")
+
+    with col2:
+        st.subheader("✨ 강화된 프롬프트")
+        st.code(enhanced, language="markdown")
+
+    # Difference explanation box
+    st.subheader("🔍 원본 vs 강화 프롬프트 차이점 분석")
+
+    diff_container = st.container()
+    with diff_container:
+        st.markdown("""
+        <style>
+        .diff-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+        }
+        .diff-item {
+            background: rgba(255,255,255,0.15);
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            margin: 0.5rem 0;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        # Display summary
+        for item in differences["summary"]:
+            st.info(item)
+
+        # Detailed differences in expander
+        with st.expander("📋 상세 차이점 보기"):
+            if differences["added_principles"]:
+                st.write("**추가된 도메인 원칙:**")
+                for p in differences["added_principles"][:5]:
+                    st.markdown(f"- {p}")
+
+            if differences["added_constraints"]:
+                st.write("**추가된 제약조건:**")
+                for c in differences["added_constraints"][:5]:
+                    st.markdown(f"- {c}")
+
+            if differences["added_expert_context"]:
+                st.success("전문가 페르소나 관점이 프롬프트에 반영되었습니다.")
+
+            if differences["added_quality_criteria"]:
+                st.success("도메인별 품질 기준이 프롬프트에 반영되었습니다.")
+
+    st.divider()
+
+    # Action buttons
+    col_btn1, col_btn2, col_btn3 = st.columns(3)
+
+    with col_btn1:
+        if st.button("📋 강화된 프롬프트 복사"):
+            st.session_state['copied_prompt'] = enhanced
+            st.success("프롬프트가 복사되었습니다!")
+
+    with col_btn2:
+        # Save to library
+        with st.popover("💾 라이브러리에 저장"):
+            prompt_name = st.text_input("프롬프트 이름", placeholder="예: 영어 문법 문항 생성 v1")
+            if st.button("저장하기", key="save_to_lib"):
+                if prompt_name:
+                    entry = add_to_library(
+                        name=prompt_name,
+                        domain=domain_config.domain_name,
+                        original=base_instruction,
+                        enhanced=enhanced,
+                        differences=differences["summary"]
+                    )
+                    st.success(f"'{prompt_name}'이(가) 라이브러리에 저장되었습니다! (ID: {entry['id']})")
+                else:
+                    st.warning("프롬프트 이름을 입력해주세요.")
+
+    with col_btn3:
+        if st.button("📚 라이브러리 보기"):
+            st.session_state['show_library'] = True
+
+    # Show library if requested
+    if st.session_state.get('show_library', False):
+        render_prompt_library()
+
+
+def render_prompt_library():
+    """Render the saved prompt library."""
+    st.subheader("📚 저장된 프롬프트 라이브러리")
+
+    library = load_prompt_library()
+
+    if not library:
+        st.info("저장된 프롬프트가 없습니다.")
+        return
+
+    for entry in reversed(library):
+        with st.expander(f"📌 {entry['name']} ({entry['domain']}) - {entry['created_at'][:10]}"):
+            st.write("**원본 프롬프트:**")
+            st.code(entry['original_prompt'], language="markdown")
+
+            st.write("**강화된 프롬프트:**")
+            st.code(entry['enhanced_prompt'], language="markdown")
+
+            st.write("**차이점:**")
+            for diff in entry.get('differences', []):
+                st.write(f"- {diff}")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button(f"📋 복사", key=f"copy_{entry['id']}"):
+                    st.session_state['copied_prompt'] = entry['enhanced_prompt']
+                    st.success("복사됨!")
+            with col2:
+                if st.button(f"🗑️ 삭제", key=f"delete_{entry['id']}"):
+                    library = [e for e in library if e['id'] != entry['id']]
+                    save_prompt_library(library)
+                    st.rerun()
 
 
 def render_critique_section(optimizer: DomainAwarePromptOptimizer, instruction: str, response: str):
@@ -422,16 +863,31 @@ def main():
         render_domain_info(config)
 
     with main_tab2:
-        task_desc, base_inst, ans_format = render_prompt_input()
+        # Use specialized UI for English question domain
+        if selected_domain == "english_question":
+            result = render_english_question_input()
+            base_inst = result[0] if result[0] else ""
 
-        if base_inst:
-            st.divider()
-            render_enhanced_prompt(optimizer, base_inst)
+            if base_inst:
+                st.divider()
+                render_enhanced_prompt(optimizer, base_inst, config)
 
-            # Expert prompt
-            st.subheader("👤 전문가 페르소나")
-            expert_prompt = optimizer.get_domain_expert_prompt()
-            st.code(expert_prompt, language="markdown")
+                # Expert prompt
+                st.subheader("👤 전문가 페르소나")
+                expert_prompt = optimizer.get_domain_expert_prompt()
+                st.code(expert_prompt, language="markdown")
+        else:
+            # Default UI for other domains
+            task_desc, base_inst, ans_format = render_prompt_input()
+
+            if base_inst:
+                st.divider()
+                render_enhanced_prompt(optimizer, base_inst, config)
+
+                # Expert prompt
+                st.subheader("👤 전문가 페르소나")
+                expert_prompt = optimizer.get_domain_expert_prompt()
+                st.code(expert_prompt, language="markdown")
 
     with main_tab3:
         st.subheader("📝 응답 입력")

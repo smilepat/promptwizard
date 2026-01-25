@@ -11,6 +11,8 @@ from typing import Dict, List, Any, Optional, Callable
 from abc import ABC, abstractmethod
 import yaml
 import os
+from .validators import BaseValidator, RegexValidator, KeywordValidator, JsonSchemaValidator
+
 
 
 @dataclass
@@ -153,6 +155,9 @@ class DomainConfig:
     # Case library for testing
     case_library: CaseLibrary = field(default_factory=CaseLibrary)
 
+    # Deterministic validators
+    validators: List[BaseValidator] = field(default_factory=list)
+
     # Additional metadata
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -176,12 +181,29 @@ class DomainConfig:
             domain_type=data.get("domain_type", "general"),
             domain_name=data.get("domain_name", data.get("domain_type", "general")),
             description=data.get("description", ""),
-            knowledge=knowledge,
             critique_template=data.get("critique_template", ""),
             refinement_template=data.get("refinement_template", ""),
             case_library=case_library,
+            validators=cls._parse_validators(data.get("validators", [])),
             metadata=data.get("metadata", {})
         )
+
+    @classmethod
+    def _parse_validators(cls, validators_data: List[Dict]) -> List[BaseValidator]:
+        """Parse dictionary data into Validator objects."""
+        validators = []
+        for v_data in validators_data:
+            v_type = v_data.get("type")
+            v_args = {k: v for k, v in v_data.items() if k != "type"}
+            
+            if v_type == "RegexValidator":
+                validators.append(RegexValidator(**v_args))
+            elif v_type == "KeywordValidator":
+                validators.append(KeywordValidator(**v_args))
+            elif v_type == "JsonSchemaValidator":
+                validators.append(JsonSchemaValidator(**v_args))
+                
+        return validators
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -207,6 +229,7 @@ class DomainConfig:
             },
             "critique_template": self.critique_template,
             "refinement_template": self.refinement_template,
+            "validators": [v.to_dict() for v in self.validators],
             "metadata": self.metadata
         }
 

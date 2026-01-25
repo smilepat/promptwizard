@@ -141,10 +141,23 @@ class DomainAwarePromptOptimizer:
             Dictionary of evaluation scores
         """
         if self.evaluator:
-            return self.evaluator.evaluate(response, ground_truth, question)
-
-        # Default evaluation if no custom evaluator
-        return self._default_evaluate(response, ground_truth)
+            scores = self.evaluator.evaluate(response, ground_truth, question)
+        else:
+            # Default evaluation if no custom evaluator
+            scores = self._default_evaluate(response, ground_truth)
+        
+        # Run deterministic validators
+        validation_results = self._run_validators(response)
+        
+        # If any validation fails, penalize heavily
+        all_passed = all(validation_results.values())
+        if not all_passed:
+            scores['overall'] = scores.get('overall', 0.5) * 0.5  # 50% penalty
+            
+        scores['validation_passed'] = 1.0 if all_passed else 0.0
+        scores['validation_details'] = validation_results
+        
+        return scores
 
     def _default_evaluate(
         self,
@@ -172,6 +185,13 @@ class DomainAwarePromptOptimizer:
             scores['overall'] = 0.5
 
         return scores
+
+    def _run_validators(self, response: str) -> Dict[str, bool]:
+        """Run all registered validators on the response."""
+        results = {}
+        for validator in self.domain_config.validators:
+            results[validator.name] = validator.validate(response)
+        return results
 
     def _check_basic_constraints(self, response: str) -> float:
         """Basic constraint checking."""

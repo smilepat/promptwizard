@@ -370,7 +370,25 @@ def get_medical_domain_config() -> DomainConfig:
                 "대한의사협회 윤리지침",
                 "WHO 환자안전 가이드라인"
             ]
-        }
+        },
+        validators=[
+            # Example validators for demonstration
+            {
+                "type": "KeywordValidator",
+                "keywords": ["상담", "전문가", "의사", "병원"],
+                "must_include": True,
+                "name": "Expert Referral Check",
+                "description": "Must recommend consulting a professional",
+                "failure_message": "응답에 전문가 상담(의사, 병원 등) 권고가 포함되어야 합니다."
+            },
+            {
+                "type": "RegexValidator",
+                "pattern": r"(?i)(error|bug|fail)",
+                "name": "Error Keyword Check",
+                "description": "Must not contain error keywords",
+                "failure_message": "응답에 'error', 'bug', 'fail' 단어가 포함되었습니다."
+            }
+        ]
     )
 
 
